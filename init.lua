@@ -40,8 +40,8 @@ P.S. You can delete this when you're done too. It's your config now :)
 -- Set <space> as the leader key
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are required (otherwise wrong leader will be used)
-vim.g.mapleader = ' '
-vim.g.maplocalleader = ' '
+vim.g.mapleader = ','
+vim.g.maplocalleader = ','
 
 -- Install package manager
 --    https://github.com/folke/lazy.nvim
@@ -76,9 +76,10 @@ require('lazy').setup({
 
   -- NOTE: This is where your plugins related to LSP can be installed.
   --  The configuration is done below. Search for lspconfig to find it below.
+  -- `gd` and `gr` for goto definition / references
+  -- `<leader>c` for code actions (organize imports, etc.)
   {
-    -- LSP Configuration & Plugins
-    'neovim/nvim-lspconfig',
+    "neovim/nvim-lspconfig",
     dependencies = {
       -- Automatically install LSPs to stdpath for neovim
       { 'williamboman/mason.nvim', config = true },
@@ -91,6 +92,78 @@ require('lazy').setup({
       -- Additional lua configuration, makes nvim stuff amazing!
       'folke/neodev.nvim',
     },
+    keys = {
+      { "gd", vim.lsp.buf.definition, desc = "Goto Definition" },
+      { "gr", vim.lsp.buf.references, desc = "Goto References" },
+      { "<leader>c", vim.lsp.buf.code_action, desc = "Code Action" },
+    },
+    init = function()
+      -- this snippet enables auto-completion
+      local lspCapabilities = vim.lsp.protocol.make_client_capabilities()
+      lspCapabilities.textDocument.completion.completionItem.snippetSupport = true
+
+      -- setup pyright with completion capabilities
+      require("lspconfig").pyright.setup({
+        capabilities = lspCapabilities,
+      })
+
+      -- setup taplo with completion capabilities
+      require("lspconfig").taplo.setup({
+        capabilities = lspCapabilities,
+      })
+
+      -- ruff uses an LSP proxy, therefore it needs to be enabled as if it
+      -- were a LSP. In practice, ruff only provides linter-like diagnostics
+      -- and some code actions, and is not a full LSP yet.
+      require("lspconfig").ruff_lsp.setup({
+        -- organize imports disabled, since we are already using `isort` for that
+        -- alternative, this can be enabled to make `organize imports`
+        -- available as code action
+        settings = {
+          organizeImports = false,
+        },
+        -- disable ruff as hover provider to avoid conflicts with pyright
+        on_attach = function(client) client.server_capabilities.hoverProvider = false end,
+      })
+    end,
+  },
+
+  -- Manager for external tools (LSPs, linters, debuggers, formatters)
+  -- auto-install of those external tools
+  {
+    "WhoIsSethDaniel/mason-tool-installer.nvim",
+    dependencies = {
+      { "williamboman/mason.nvim" },
+      { "williamboman/mason-lspconfig.nvim" },
+    },
+    opts = {
+      ensure_installed = {
+        "pyright", -- LSP for python
+        "ruff-lsp", -- linter for python (includes flake8, pep8, etc.)
+        "debugpy", -- debugger
+        "black", -- formatter
+        "isort", -- organize imports
+        "taplo", -- LSP for toml (for pyproject.toml files)
+      },
+    },
+  },
+
+  -- Configuration for the python debugger
+  -- - configures debugpy for us
+  -- - uses the debugpy installation from mason
+  {
+    "mfussenegger/nvim-dap-python",
+    dependencies = {
+      { "mfussenegger/nvim-dap"},
+      { "williamboman/mason.nvim" },
+      { "williamboman/mason-lspconfig.nvim" },
+    },
+    config = function()
+      -- uses the debugypy installation by mason
+      local debugpyPythonPath = require("mason-registry").get_package("debugpy"):get_install_path()
+        .. "/venv/bin/python3"
+      require("dap-python").setup(debugpyPythonPath, {})
+    end,
   },
 
   {
@@ -325,10 +398,10 @@ vim.keymap.set('n', '<leader>sr', require('telescope.builtin').resume, { desc = 
 -- See `:help nvim-treesitter`
 require('nvim-treesitter.configs').setup {
   -- Add languages to be installed here that you want installed for treesitter
-  ensure_installed = { 'c', 'cpp', 'go', 'lua', 'python', 'rust', 'tsx', 'javascript', 'typescript', 'vimdoc', 'vim' },
+  ensure_installed = { 'c', 'cpp', 'go', 'lua', 'python', 'rust', 'toml', 'tsx', 'javascript', 'typescript', 'vimdoc', 'vim', "rst", "ninja" },
 
   -- Autoinstall languages that are not installed. Defaults to false (but you can change for yourself!)
-  auto_install = false,
+  auto_install = true,
 
   highlight = { enable = true },
   indent = { enable = true },
@@ -468,6 +541,22 @@ require('neodev').setup()
 -- nvim-cmp supports additional completion capabilities, so broadcast that to servers
 local capabilities = vim.lsp.protocol.make_client_capabilities()
 capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
+
+-- Updates the Mason registry
+local mr = require("mason-registry")
+local function install_ensured()
+  for _, tool in ipairs({}) do
+    local p = mr.get_package(tool)
+    if not p:is_installed() then
+      p:install()
+    end
+  end
+end
+if mr.refresh then
+  mr.refresh(install_ensured)
+else
+  install_ensured()
+end
 
 -- Ensure the servers above are installed
 local mason_lspconfig = require 'mason-lspconfig'

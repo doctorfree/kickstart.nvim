@@ -31,69 +31,6 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 return {
-	-- TOOLING: COMPLETION, DIAGNOSTICS, FORMATTING
-
-	-- Manager for external tools (LSPs, linters, debuggers, formatters)
-	-- auto-install of those external tools
-	{
-		"WhoIsSethDaniel/mason-tool-installer.nvim",
-		dependencies = {
-			{ "williamboman/mason.nvim", opts = true },
-			{ "williamboman/mason-lspconfig.nvim", opts = true },
-		},
-		opts = {
-			ensure_installed = {
-				"pyright", -- LSP for python
-				"ruff-lsp", -- linter for python (includes flake8, pep8, etc.)
-				"debugpy", -- debugger
-				"black", -- formatter
-				"isort", -- organize imports
-				"taplo", -- LSP for toml (for pyproject.toml files)
-			},
-		},
-	},
-
-	-- Setup the LSPs
-	-- `gd` and `gr` for goto definition / references
-	-- `<leader>c` for code actions (organize imports, etc.)
-	{
-		"neovim/nvim-lspconfig",
-		keys = {
-			{ "gd", vim.lsp.buf.definition, desc = "Goto Definition" },
-			{ "gr", vim.lsp.buf.references, desc = "Goto References" },
-			{ "<leader>c", vim.lsp.buf.code_action, desc = "Code Action" },
-		},
-		init = function()
-			-- this snippet enables auto-completion
-			local lspCapabilities = vim.lsp.protocol.make_client_capabilities()
-			lspCapabilities.textDocument.completion.completionItem.snippetSupport = true
-
-			-- setup pyright with completion capabilities
-			require("lspconfig").pyright.setup({
-				capabilities = lspCapabilities,
-			})
-
-			-- setup taplo with completion capabilities
-			require("lspconfig").taplo.setup({
-				capabilities = lspCapabilities,
-			})
-
-			-- ruff uses an LSP proxy, therefore it needs to be enabled as if it
-			-- were a LSP. In practice, ruff only provides linter-like diagnostics
-			-- and some code actions, and is not a full LSP yet.
-			require("lspconfig").ruff_lsp.setup({
-				-- organize imports disabled, since we are already using `isort` for that
-				-- alternative, this can be enabled to make `organize imports`
-				-- available as code action
-				settings = {
-					organizeImports = false,
-				},
-				-- disable ruff as hover provider to avoid conflicts with pyright
-				on_attach = function(client) client.server_capabilities.hoverProvider = false end,
-			})
-		end,
-	},
-
 	-- Formatting client: conform.nvim
 	-- - configured to use black & isort in python
 	-- - use the taplo-LSP for formatting in toml
@@ -223,26 +160,6 @@ return {
 	},
 
 	-----------------------------------------------------------------------------
-	-- SYNTAX HIGHLIGHTING
-
-	-- treesitter for syntax highlighting
-	-- - auto-installs the parser for python
-	{
-		"nvim-treesitter/nvim-treesitter",
-		-- automatically update the parsers with every new release of treesitter
-		build = ":TSUpdate",
-
-		-- since treesitter's setup call is `require("nvim-treesitter.configs").setup`,
-		-- instead of `require("nvim-treesitter").setup` like other plugins do, we
-		-- need to tell lazy.nvim which module to via the `main` key
-		main = "nvim-treesitter.configs",
-
-		opts = {
-			highlight = { enable = true }, -- enable treesitter syntax highlighting
-			-- auto-install the Treesitter parser for python and related languages
-			ensure_installed = { "python", "toml", "rst", "ninja" },
-		},
-	},
 
 	-- COLORSCHEME
 	-- In neovim, the choice of color schemes is unfortunately not purely
@@ -307,20 +224,6 @@ return {
 			listener.after.event_initialized["dapui_config"] = function() require("dapui").open() end
 			listener.before.event_terminated["dapui_config"] = function () require("dapui").close() end
 			listener.before.event_exited["dapui_config"] = function() require("dapui").close() end
-		end,
-	},
-
-	-- Configuration for the python debugger
-	-- - configures debugpy for us
-	-- - uses the debugpy installation from mason
-	{
-		"mfussenegger/nvim-dap-python",
-		dependencies = "mfussenegger/nvim-dap",
-		config = function()
-			-- uses the debugypy installation by mason
-			local debugpyPythonPath = require("mason-registry").get_package("debugpy"):get_install_path()
-				.. "/venv/bin/python3"
-			require("dap-python").setup(debugpyPythonPath, {})
 		end,
 	},
 
